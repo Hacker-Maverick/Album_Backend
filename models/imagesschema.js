@@ -9,12 +9,9 @@ const imageSchema = new mongoose.Schema(
     },
     images: [
       {
-        filename: {
+        key: {
           type: String, // name or key in S3
           required: true,
-        },
-        url: {
-          type: String, // full S3 URL (optional but useful)
         },
         uploadedBy: {
           type: mongoose.Schema.Types.ObjectId,
@@ -23,6 +20,10 @@ const imageSchema = new mongoose.Schema(
         uploadedAt: {
           type: Date,
           default: Date.now,
+        },
+        ref:{
+          type: mongoose.Schema.Types.Number,
+          default: 0,
         },
       },
     ],

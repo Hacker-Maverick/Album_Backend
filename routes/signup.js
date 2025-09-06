@@ -25,7 +25,7 @@ router.post("/signup", async (req, res) => {
       authProvider: "manual",
       plan: {
         plan: "Free",
-        totalSpace: 2048, // 2GB
+        totalSpace: 2048 * 1024 * 1024, // 2GB
         spaceUsed: 0,
         valid_rom: new Date(),
         valid_till: null, // Free plan has no expiry

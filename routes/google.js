@@ -37,7 +37,7 @@ router.post("/auth/google", async (req, res) => {
         authProvider: "google",
         emailVerified: true,
         plan: {
-          totalSpace: 2 * 1024, // 2GB in bytes
+          totalSpace: 2 * 1024 * 1024 * 1024, // 2GB in bytes
           spaceUsed: 0,
           valid_from: new Date(),
           valid_till: null, // free forever until upgraded

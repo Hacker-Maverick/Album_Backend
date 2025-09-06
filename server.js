@@ -14,6 +14,9 @@ import googleRoutes from './routes/google.js';
 import testRoutes from './routes/test.js';
 import completeProfileRoutes from './routes/complete-profile.js';
 import paymentRoutes from './routes/payment.js';
+import uploads from "./routes/uploads.js";
+import tags from "./routes/tags.js";
+import share from "./routes/share.js";
 
 dotenv.config();
 
@@ -70,6 +73,9 @@ app.use(googleRoutes);
 app.use(testRoutes);
 app.use(completeProfileRoutes);
 app.use(paymentRoutes);
+app.use(uploads);
+app.use(tags);
+app.use(share);
 
 //Server listening
 app.listen(process.env.PORT, () => {

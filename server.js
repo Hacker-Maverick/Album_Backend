@@ -17,6 +17,8 @@ import paymentRoutes from './routes/payment.js';
 import uploads from "./routes/uploads.js";
 import tags from "./routes/tags.js";
 import share from "./routes/share.js";
+import edit from "./routes/edit.js";
+import deleteRoute from "./routes/delete.js";
 
 dotenv.config();
 
@@ -76,6 +78,8 @@ app.use(paymentRoutes);
 app.use(uploads);
 app.use(tags);
 app.use(share);
+app.use(edit);
+app.use(deleteRoute);
 
 //Server listening
 app.listen(process.env.PORT, () => {

@@ -24,6 +24,7 @@ const e404 = (res, m) => res.status(404).json({ code: "NOT_FOUND", message: m })
 const e422 = (res, m) => res.status(422).json({ code: "UNPROCESSABLE", message: m });
 const e500 = (res, m) => res.status(500).json({ code: "SERVER_ERROR", message: m });
 
+// 1) INIT: return presigned PUT URLs
 router.post("/upload-init", authMiddleware, async (req, res, next) => {
   try {
     const { files } = req.body;
@@ -46,13 +47,13 @@ router.post("/upload-init", authMiddleware, async (req, res, next) => {
     }
     res.json({ bucket: BUCKET, items });
   } catch (err) { next(err); }
-}); [3][4]
+});
 
+// 2) COMPLETE: verify HEAD, create Image docs, attach to album, update quota, tag requests
 router.post("/upload-complete", authMiddleware, async (req, res) => {
   try {
     const { keys, event, date, taggeesUsernames = [] } = req.body;
-    const albumIds = toArray(req.body.albumIds);
-
+    const albumIds = Array.isArray(req.body.albumIds) ? req.body.albumIds : [];
     if (!Array.isArray(keys) || keys.length === 0) return e400(res, "keys required");
     if (!albumIds.length) return e400(res, "albumIds required");
     if (!event || !date) return e400(res, "event and date required");
@@ -61,17 +62,17 @@ router.post("/upload-complete", authMiddleware, async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return e404(res, "user not found");
 
-    // verify keys exist in S3 and compute size
-    const confirmed = [];
+    // Verify S3 and sizes
+    const toCreate = [];
     let bytesAdded = 0;
     for (const key of keys) {
-      if (!key || typeof key !== "string") return e400(res, "invalid key");
       try {
         const head = await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }));
         const size = Number(head?.ContentLength ?? 0);
         const remaining = Number(user?.plan?.totalSpace || 0) - Number(user?.plan?.spaceUsed || 0) - bytesAdded;
+        if (size <= 0) return e422(res, "empty object not allowed");
         if (size > remaining) return e402(res, "quota exceeded");
-        confirmed.push({ key, uploadedBy: user._id });
+        toCreate.push({ key, uploadedBy: user._id, size });
         bytesAdded += size;
       } catch (e) {
         const sc = e?.$metadata?.httpStatusCode ?? null;
@@ -80,79 +81,81 @@ router.post("/upload-complete", authMiddleware, async (req, res) => {
         return e500(res, "s3 verification failed");
       }
     }
-    if (!confirmed.length) return e422(res, "no valid uploads"); [5][2]
 
-    let taggeeIds = [];
-    if (taggeesUsernames.length) {
-      const users = await User.find({ username: { $in: taggeesUsernames.map(String) } }, { _id: 1, username: 1 }).lean();
-      const found = new Set(users.map(u => u.username));
-      const missing = taggeesUsernames.filter(u => !found.has(String(u)));
-      if (missing.length) return e404(res, "username not found");
-      taggeeIds = [...new Set(users.map(u => String(u._id)))];
-    } 
+    // Create Image docs
+    const created = await Image.insertMany(
+      toCreate.map(({ key, uploadedBy, size }) => ({ images: { key, uploadedBy, size } })),
+      { ordered: true }
+    );
+    const createdIds = created.map(d => d._id);
 
-    const albums = await Album.find({ _id: { $in: albumIds } });
-    if (albums.length !== albumIds.length) return e404(res, "album not found"); [3]
-
+    // Attach to each album
     const normalizedDate = new Date(date);
     const sameDay = (d1, d2) => dayjs(d1).startOf("day").isSame(dayjs(d2).startOf("day"));
 
-    const results = [];
-    // collect all new sub-image ObjectIds per album so we can push into requests
-    const createdSubImageIds = [];
+    for (const albumId of albumIds) {
+      const album = await Album.findById(albumId);
+      if (!album) continue;
 
-    for (const album of albums) {
       album.data = Array.isArray(album.data) ? album.data : [];
-      const existingIdx = album.data.findIndex(
-        it => it?.event === event && it?.date && sameDay(it.date, normalizedDate)
+      let rowIdx = album.data.findIndex(r => r?.event === event && r?.date && sameDay(r.date, normalizedDate));
+      if (rowIdx === -1) {
+        album.data.push({ event, date: normalizedDate, images: [] });
+        rowIdx = album.data.length - 1;
+      }
+
+      const addIds = createdIds.map(id => new mongoose.Types.ObjectId(id));
+      const upd = await Album.updateOne(
+        { _id: album._id, [`data.${rowIdx}.event`]: event, [`data.${rowIdx}.date`]: album.data[rowIdx].date },
+        { $addToSet: { [`data.${rowIdx}.images`]: { $each: addIds } } }
       );
 
-      if (existingIdx >= 0) {
-        const imageRefId = album.data[existingIdx].images;
-        let imageDoc = await Image.findById(imageRefId);
-        if (!imageDoc) {
-          imageDoc = await Image.create({
-            album: album._id,
-            images: confirmed.map(({ key, uploadedBy }) => ({ key, uploadedBy }))
-          });
-          album.data[existingIdx].images = imageDoc._id;
-          await album.save();
-          // new subdocs created above
-          for (const sub of imageDoc.images) createdSubImageIds.push(String(sub._id));
-        } else {
-          // push and capture subdoc ids
-          for (const { key, uploadedBy } of confirmed) {
-            imageDoc.images.push({ key, uploadedBy });
-            const pushed = imageDoc.images[imageDoc.images.length - 1];
-            createdSubImageIds.push(String(pushed._id));
-          }
-          await imageDoc.save();
-        }
-        results.push({ albumId: album._id, imageDocId: imageDoc._id, merged: true });
-      } else {
-        // create new Image doc and data entry
-        const imageDoc = await Image.create({
-          album: album._id,
-          images: confirmed.map(({ key, uploadedBy }) => ({ key, uploadedBy }))
-        });
-        album.data.push({ event, date: normalizedDate, images: imageDoc._id });
+      if (!upd.matchedCount) {
+        const has = new Set(album.data[rowIdx].images.map(x => String(x)));
+        for (const oid of addIds) if (!has.has(String(oid))) album.data[rowIdx].images.push(oid);
         await album.save();
-        for (const sub of imageDoc.images) createdSubImageIds.push(String(sub._id));
-        results.push({ albumId: album._id, imageDocId: imageDoc._id, merged: false });
+      }
+
+      // Increment ref for attached images
+      const fresh = await Album.findById(album._id, { data: 1 });
+      const row = fresh?.data?.[rowIdx];
+      if (row?.images?.length) {
+        const present = new Set(row.images.map(x => String(x)));
+        const actuallyAdded = createdIds.filter(id => present.has(String(id)));
+        if (actuallyAdded.length) {
+          await Image.updateMany(
+            { _id: { $in: actuallyAdded } },
+            { $inc: { "images.ref": 1 } }
+          );
+        }
       }
     }
 
+    // Update uploader storage
     if (bytesAdded > 0) {
       user.plan.spaceUsed = Number(user.plan?.spaceUsed || 0) + bytesAdded;
       await user.save();
     }
 
-    if (taggeeIds.length && createdSubImageIds.length) {
-      const requestDoc = { from: user._id, date: new Date(), images: createdSubImageIds };
-      await User.updateMany({ _id: { $in: taggeeIds } }, { $push: { requests: requestDoc } });
-    } 
+    // Tag requests
+    if (Array.isArray(taggeesUsernames) && taggeesUsernames.length) {
+      const users = await User.find(
+        { username: { $in: taggeesUsernames.map(String) } },
+        { _id: 1, username: 1 }
+      ).lean();
+      const found = new Set(users.map(u => u.username));
+      const missing = taggeesUsernames.filter(u => !found.has(String(u)));
+      if (missing.length) return e404(res, "username not found");
 
-    res.json({ albumsProcessed: results.length, results, imagesCreated: createdSubImageIds.length });
+      const taggeeIds = users.map(u => u._id);
+      const requestDoc = { from: user._id, date: new Date(), images: createdIds };
+      await User.updateMany(
+        { _id: { $in: taggeeIds } },
+        { $push: { requests: requestDoc } }
+      );
+    }
+
+    return res.json({ created: createdIds.length, imageIds: createdIds });
   } catch (err) {
     return e500(res, "server error");
   }

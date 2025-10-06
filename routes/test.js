@@ -4,11 +4,10 @@ import{ authMiddleware }from "../middlewares/auth.js";
 const router = express.Router();
 
 // Protected route
-router.get("/protected", authMiddleware, (req, res) => {
-  res.json({
+router.get("/",(req, res) => {
+  res.status(200).json({
     success: true,
-    message: "You are authorized!",
-    user: req.user, // comes from decoded JWT
+    message: "Test route is working fine",
   });
 });
 

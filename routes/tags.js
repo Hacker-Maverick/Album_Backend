@@ -21,7 +21,7 @@ const isValidId = id =>
 // Accept a tag request: attach images to event/date rows in multiple albums and clean up requests
 router.post("/requests/accept", authMiddleware, async (req, res) => {
   try {
-    const { imageIds = [], event, date, albumIds = [], taggeesUsernames = [] } = req.body;
+    const { imageIds = [], event, date, albumIds = [], taggeesUsernames = [], requestIndex } = req.body;
 
     // Validate inputs
     if (!Array.isArray(imageIds) || imageIds.length === 0) return e400(res, "imageIds required");
@@ -30,10 +30,17 @@ router.post("/requests/accept", authMiddleware, async (req, res) => {
     for (const id of imageIds) if (!isValidId(id)) return e400(res, "invalid image id");
     for (const id of albumIds) if (!isValidId(id)) return e400(res, "invalid album id");
 
+    // Validate requestIndex if provided
+    if (requestIndex !== undefined) {
+      if (typeof requestIndex !== "number" || requestIndex < 0) {
+        return e400(res, "requestIndex must be a non-negative number");
+      }
+    }
+
     const me = await User.findById(req.user.id);
     if (!me) return e404(res, "user not found");
 
-    // Quota check using sizes from Image docs
+    // Quota check
     const imgs = await Image.find(
       { _id: { $in: imageIds.map(x => new mongoose.Types.ObjectId(x)) } },
       { "images.size": 1 }
@@ -44,12 +51,10 @@ router.post("/requests/accept", authMiddleware, async (req, res) => {
     const remaining = Number(me?.plan?.totalSpace || 0) - Number(me?.plan?.spaceUsed || 0);
     if (totalBytes > remaining) return e402(res, "storage quota exceeded");
 
-    // Normalize date and prepare ids
     const normalizedDate = new Date(date);
     const sameDay = (d1, d2) => dayjs(d1).startOf("day").isSame(dayjs(d2).startOf("day"));
     const objIds = imageIds.map(id => new mongoose.Types.ObjectId(id));
 
-    // For each album, upsert the event+same-day row and add images
     let totalAdded = 0;
     for (const albumId of albumIds) {
       const album = await Album.findById(albumId);
@@ -64,20 +69,17 @@ router.post("/requests/accept", authMiddleware, async (req, res) => {
         rowIdx = album.data.length - 1;
       }
 
-      // Try atomic addToSet using current row's exact date value
       const upd = await Album.updateOne(
         { _id: album._id, [`data.${rowIdx}.event`]: event, [`data.${rowIdx}.date`]: album.data[rowIdx].date },
         { $addToSet: { [`data.${rowIdx}.images`]: { $each: objIds } } }
       );
 
-      // Fallback mutate+save if match failed due to date object mismatch
       if (!upd.matchedCount) {
         const have = new Set(album.data[rowIdx].images.map(x => String(x)));
         for (const oid of objIds) if (!have.has(String(oid))) album.data[rowIdx].images.push(oid);
         await album.save();
       }
 
-      // Determine which were actually attached and increment refs once
       const fresh = await Album.findById(album._id, { data: 1 });
       const row = fresh?.data?.[rowIdx];
       if (row?.images?.length) {
@@ -94,13 +96,11 @@ router.post("/requests/accept", authMiddleware, async (req, res) => {
       }
     }
 
-    // Update accepter's storage usage once
     if (totalBytes > 0) {
       me.plan.spaceUsed = Number(me.plan?.spaceUsed || 0) + totalBytes;
       await me.save();
     }
 
-    // Forward requests to taggees (optional)
     if (Array.isArray(taggeesUsernames) && taggeesUsernames.length && imageIds.length) {
       const users = await User.find(
         { username: { $in: taggeesUsernames.map(String) } },
@@ -115,11 +115,17 @@ router.post("/requests/accept", authMiddleware, async (req, res) => {
       await User.updateMany({ _id: { $in: taggeeIds } }, { $push: { requests: requestDoc } });
     }
 
-    // Remove any of my pending requests that include any of these imageIds
-    await User.updateOne(
-      { _id: me._id },
-      { $pull: { requests: { images: { $elemMatch: { $in: imageIds.map(String) } } } } }
-    );
+    // Instead of removing by matching imageIds, remove request by requestIndex if provided
+    if (typeof requestIndex === "number") {
+      await User.updateOne(
+        { _id: me._id },
+        { $unset: { [`requests.${requestIndex}`]: 1 } }
+      );
+      await User.updateOne(
+        { _id: me._id },
+        { $pull: { requests: null } }
+      );
+    }
 
     return res.json({ added: totalAdded, imageIds });
   } catch (err) {

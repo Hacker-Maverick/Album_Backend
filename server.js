@@ -19,6 +19,7 @@ import tags from "./routes/tags.js";
 import share from "./routes/share.js";
 import edit from "./routes/edit.js";
 import deleteRoute from "./routes/delete.js";
+import meRoutes from "./routes/me.js";
 
 dotenv.config();
 
@@ -80,6 +81,7 @@ app.use(tags);
 app.use(share);
 app.use(edit);
 app.use(deleteRoute);
+app.use(meRoutes);
 
 //Server listening
 app.listen(process.env.PORT, () => {

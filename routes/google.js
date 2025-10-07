@@ -33,6 +33,7 @@ router.post("/auth/google", async (req, res) => {
     if (!user) {
       // If not, create new user with default free plan
       user = await User.create({
+        username: email.split("@")[0], // Use part of email as username
         email,
         authProvider: "google",
         emailVerified: true,

@@ -2,10 +2,8 @@ import express from "express";
 import User from "../models/userschema.js";
 import { comparePassword } from "../utils/bcrypt.js";
 import { generateToken } from "../utils/jwt.js";
-import { OAuth2Client } from "google-auth-library";
 
 const router = express.Router();
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Manual Login
 router.post("/login", async (req, res) => {

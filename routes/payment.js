@@ -116,7 +116,7 @@ router.post("/verify", authMiddleware, async (req, res) => {
         });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Verification failed" });
+        res.status(500).json({ message: "Verification failed" });
     }
 });
 

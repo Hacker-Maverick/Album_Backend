@@ -2,6 +2,7 @@ import express from "express";
 import User from "../models/userschema.js";
 import { hashPassword } from "../utils/bcrypt.js";
 import { generateToken } from "../utils/jwt.js";
+import { createEmptyAlbum } from "../utils/createAlbum.js";
 
 const router = express.Router();
 
@@ -16,6 +17,7 @@ router.post("/signup", async (req, res) => {
     }
 
     const hashedPassword = await hashPassword(password);
+    const main_album_id = await createEmptyAlbum("main");
 
     const user = new User({
       username,
@@ -31,7 +33,7 @@ router.post("/signup", async (req, res) => {
         valid_till: null, // Free plan has no expiry
         paymentId: null,
       },
-      main_album: null,
+      main_album: main_album_id,
     });
 
     await user.save();

@@ -2,6 +2,7 @@ import express from "express";
 import { OAuth2Client } from "google-auth-library";
 import User from "../models/userschema.js";
 import { generateToken } from "../utils/jwt.js";
+import { createEmptyAlbum } from "../utils/createAlbum.js";
 
 const router = express.Router();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -32,6 +33,7 @@ router.post("/auth/google", async (req, res) => {
 
     if (!user) {
       // If not, create new user with default free plan
+          const main_album_id = await createEmptyAlbum("main");
       user = await User.create({
         username: email.split("@")[0], // Use part of email as username
         email,
@@ -45,7 +47,7 @@ router.post("/auth/google", async (req, res) => {
           plan: "free",
           paymentId: null,
         },
-        main_album: null,
+        main_album: main_album_id,
       });
     }
 

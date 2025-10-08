@@ -20,6 +20,7 @@ import share from "./routes/share.js";
 import edit from "./routes/edit.js";
 import deleteRoute from "./routes/delete.js";
 import meRoutes from "./routes/me.js";
+import loadImages from "./routes/loadImages.js";
 
 dotenv.config();
 
@@ -82,6 +83,7 @@ app.use(share);
 app.use(edit);
 app.use(deleteRoute);
 app.use(meRoutes);
+app.use("/albums", loadImages);
 
 //Server listening
 app.listen(process.env.PORT, () => {

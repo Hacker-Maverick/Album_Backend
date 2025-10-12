@@ -11,7 +11,6 @@ import connectDB from './config/mongodb.js'
 import signupRoutes from './routes/signup.js';
 import loginRoutes from './routes/login.js';
 import googleRoutes from './routes/google.js';
-import testRoutes from './routes/test.js';
 import completeProfileRoutes from './routes/complete-profile.js';
 import paymentRoutes from './routes/payment.js';
 import uploads from "./routes/uploads.js";
@@ -21,6 +20,8 @@ import edit from "./routes/edit.js";
 import deleteRoute from "./routes/delete.js";
 import meRoutes from "./routes/me.js";
 import loadImages from "./routes/loadImages.js";
+import download from "./routes/download.js";
+import view from "./routes/view.js";
 
 dotenv.config();
 
@@ -46,12 +47,12 @@ app.use(cors({
 }));
 
 //Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP
-  message: 'Too many requests, please try again later.',
-});
-app.use(limiter);
+// const limiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, // 15 minutes
+//   max: 100, // Limit each IP
+//   message: 'Too many requests, please try again later.',
+// });
+// app.use(limiter);
 
 // // Prevent NoSQL Injection
 app.use((req, res, next) => {
@@ -74,7 +75,6 @@ app.use(hpp());
 app.use(signupRoutes);
 app.use(loginRoutes);
 app.use(googleRoutes);
-app.use(testRoutes);
 app.use(completeProfileRoutes);
 app.use(paymentRoutes);
 app.use(uploads);
@@ -84,6 +84,8 @@ app.use(edit);
 app.use(deleteRoute);
 app.use(meRoutes);
 app.use("/albums", loadImages);
+app.use(download);
+app.use(view);
 
 //Server listening
 app.listen(process.env.PORT, () => {

@@ -30,6 +30,7 @@ router.post("/auth/google", async (req, res) => {
 
     // ✅ Check if user already exists
     let user = await User.findOne({ email });
+    var statuscode=200;
 
     if (!user) {
       // If not, create new user with default free plan
@@ -49,12 +50,14 @@ router.post("/auth/google", async (req, res) => {
         },
         main_album: main_album_id,
       });
+      statuscode=201
     }
+    
 
     // ✅ Generate JWT for app authentication
     const token = generateToken({ id: user._id });
 
-    res.status(200).json({
+    res.status(statuscode).json({
       message: "Google login success",
       token,
       email: user.email,

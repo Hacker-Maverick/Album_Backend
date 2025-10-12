@@ -12,7 +12,7 @@ const BUCKET_NAME = process.env.S3_BUCKET;
 
 // POST /api/images/download-urls
 // Body: { imageIds: [array of image ObjectIds as strings] }
-router.post("/download",authMiddleware, async (req, res) => {
+router.post("/download", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id; // assume populated by auth middleware
     const { imageIds } = req.body;
@@ -29,7 +29,6 @@ router.post("/download",authMiddleware, async (req, res) => {
     // Find images owned by this user matching IDs
     const images = await Image.find({
       _id: { $in: validImageIds },
-      "images.uploadedBy": userId,
     }).select("images.key _id").lean();
 
     if (images.length === 0) {

@@ -25,7 +25,6 @@ router.post("/view",authMiddleware, async (req, res) => {
     // Find images owned by user
     const images = await Image.find({
       _id: { $in: validImageIds },
-      "images.uploadedBy": userId,
     }).select("images.key _id").lean();
 
     if (images.length === 0) {

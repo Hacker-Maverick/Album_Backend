@@ -22,6 +22,7 @@ import meRoutes from "./routes/me.js";
 import loadImages from "./routes/loadImages.js";
 import download from "./routes/download.js";
 import view from "./routes/view.js";
+import makegroup from "./routes/makegroup.js";
 
 dotenv.config();
 
@@ -86,6 +87,7 @@ app.use(meRoutes);
 app.use("/albums", loadImages);
 app.use(download);
 app.use(view);
+app.use(makegroup);
 
 //Server listening
 app.listen(process.env.PORT, () => {

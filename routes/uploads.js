@@ -7,15 +7,19 @@ import User from "../models/userschema.js";
 import { Album } from "../models/albumschema.js";
 import { Image } from "../models/imagesschema.js";
 import { presignPutUrl } from "../services/s3Presign.js";
+import { deleteS3Objects } from "../services/s3Delete.js";
 import { mediaKey, detectExt } from "../utils/keys.js";
 import { authMiddleware } from "../middlewares/auth.js";
 
 const router = express.Router();
 const s3 = new S3Client({ region: process.env.AWS_REGION });
 const BUCKET = process.env.S3_BUCKET;
+const THUMB_BUCKET = process.env.THUMB_BUCKET;
 
-const toArray = v => Array.isArray(v) ? v : (v == null ? [] : String(v).split(",").map(s => s.trim()).filter(Boolean));
-const isValidId = id => mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === String(id);
+// ---------- Helper Functions ----------
+const isValidId = id =>
+  mongoose.Types.ObjectId.isValid(id) &&
+  String(new mongoose.Types.ObjectId(id)) === String(id);
 
 const e400 = (res, m) => res.status(400).json({ code: "VALIDATION_ERROR", message: m });
 const e402 = (res, m) => res.status(402).json({ code: "QUOTA_EXCEEDED", message: m });
@@ -24,7 +28,9 @@ const e404 = (res, m) => res.status(404).json({ code: "NOT_FOUND", message: m })
 const e422 = (res, m) => res.status(422).json({ code: "UNPROCESSABLE", message: m });
 const e500 = (res, m) => res.status(500).json({ code: "SERVER_ERROR", message: m });
 
+// ===========================================================
 // 1) INIT: return presigned PUT URLs
+// ===========================================================
 router.post("/upload-init", authMiddleware, async (req, res, next) => {
   try {
     const { files } = req.body;
@@ -38,22 +44,36 @@ router.post("/upload-init", authMiddleware, async (req, res, next) => {
 
     const now = dayjs(), y = now.format("YYYY"), m = now.format("MM");
     const items = [];
+
     for (const f of files) {
       const mime = f?.mime || "application/octet-stream";
       const ext = detectExt(mime);
       const key = mediaKey({ userId: req.user.id, ext, y, m });
-      const url = await presignPutUrl({ bucket: BUCKET, key, contentType: mime });
-      items.push({ key, url, contentType: mime });
+      const thumbnailKey = key
+
+      const fileItem = {
+        key,
+        thumbnailKey,
+        contentType: mime,
+        url: await presignPutUrl({ bucket: BUCKET, key, contentType: mime }),
+        thumbnailUrl: await presignPutUrl({ bucket: THUMB_BUCKET, key: thumbnailKey, contentType: "image/jpeg" }),
+      };
+      items.push(fileItem);
     }
+
     res.json({ bucket: BUCKET, items });
   } catch (err) { next(err); }
 });
 
-// 2) COMPLETE: verify HEAD, create Image docs, attach to album, update quota, tag requests
+// ===========================================================
+// 2) COMPLETE: verify, create Image docs, attach to albums, tag users
+// ===========================================================
 router.post("/upload-complete", authMiddleware, async (req, res) => {
+  let uploadedKeys = [];
   try {
-    const { keys, event, date, taggeesUsernames = [] } = req.body;
+    const { keys, thumbnailKeys = [], event, date, taggeesUsernames = [] } = req.body;
     const albumIds = Array.isArray(req.body.albumIds) ? req.body.albumIds : [];
+
     if (!Array.isArray(keys) || keys.length === 0) return e400(res, "keys required");
     if (!albumIds.length) return e400(res, "albumIds required");
     if (!event || !date) return e400(res, "event and date required");
@@ -62,34 +82,42 @@ router.post("/upload-complete", authMiddleware, async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return e404(res, "user not found");
 
-    // Verify S3 and sizes
+    // ---------- Verify S3 and calculate size ----------
     const toCreate = [];
     let bytesAdded = 0;
-    for (const key of keys) {
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      const thumbKey = thumbnailKeys[i] || null;
+      uploadedKeys.push(key);
+      if (thumbKey) uploadedKeys.push(thumbKey);
+
       try {
         const head = await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }));
         const size = Number(head?.ContentLength ?? 0);
         const remaining = Number(user?.plan?.totalSpace || 0) - Number(user?.plan?.spaceUsed || 0) - bytesAdded;
-        if (size <= 0) return e422(res, "empty object not allowed");
-        if (size > remaining) return e402(res, "quota exceeded");
-        toCreate.push({ key, uploadedBy: user._id, size });
+        if (size <= 0) throw new Error("empty object");
+        if (size > remaining) throw new Error("quota exceeded");
+        toCreate.push({ key, thumbnailKey: thumbKey, uploadedBy: user._id, size });
         bytesAdded += size;
       } catch (e) {
-        const sc = e?.$metadata?.httpStatusCode ?? null;
-        if (sc === 404) return e422(res, "object not found in s3");
-        if (sc === 403) return e403(res, "s3 access denied");
+        console.error("S3 verification failed:", e.message);
+        await deleteS3Objects(uploadedKeys);
+        if (e.message === "empty object") return e422(res, "empty object not allowed");
+        if (e.message === "quota exceeded") return e402(res, "quota exceeded");
         return e500(res, "s3 verification failed");
       }
     }
 
-    // Create Image docs
+    // ---------- Create Image docs ----------
     const created = await Image.insertMany(
-      toCreate.map(({ key, uploadedBy, size }) => ({ images: { key, uploadedBy, size } })),
+      toCreate.map(({ key, thumbnailKey, uploadedBy, size }) => ({
+        images: { key, thumbnailKey, uploadedBy, size, ref: 0 },
+      })),
       { ordered: true }
     );
     const createdIds = created.map(d => d._id);
 
-    // Attach to each album
+    // ---------- Attach to albums ----------
     const normalizedDate = new Date(date);
     const sameDay = (d1, d2) => dayjs(d1).startOf("day").isSame(dayjs(d2).startOf("day"));
 
@@ -115,48 +143,54 @@ router.post("/upload-complete", authMiddleware, async (req, res) => {
         for (const oid of addIds) if (!has.has(String(oid))) album.data[rowIdx].images.push(oid);
         await album.save();
       }
-
-      // Increment ref for attached images
-      const fresh = await Album.findById(album._id, { data: 1 });
-      const row = fresh?.data?.[rowIdx];
-      if (row?.images?.length) {
-        const present = new Set(row.images.map(x => String(x)));
-        const actuallyAdded = createdIds.filter(id => present.has(String(id)));
-        if (actuallyAdded.length) {
-          await Image.updateMany(
-            { _id: { $in: actuallyAdded } },
-            { $inc: { "images.ref": 1 } }
-          );
-        }
-      }
     }
 
-    // Update uploader storage
-    if (bytesAdded > 0) {
-      user.plan.spaceUsed = Number(user.plan?.spaceUsed || 0) + bytesAdded;
-      await user.save();
-    }
+    // ---------- Tag users ----------
+    let validTaggedUsers = [];
+    let invalidUsernames = [];
 
-    // Tag requests
     if (Array.isArray(taggeesUsernames) && taggeesUsernames.length) {
       const users = await User.find(
         { username: { $in: taggeesUsernames.map(String) } },
         { _id: 1, username: 1 }
       ).lean();
-      const found = new Set(users.map(u => u.username));
-      const missing = taggeesUsernames.filter(u => !found.has(String(u)));
-      if (missing.length) return e404(res, "username not found");
 
-      const taggeeIds = users.map(u => u._id);
-      const requestDoc = { from: user._id, date: new Date(), images: createdIds };
-      await User.updateMany(
-        { _id: { $in: taggeeIds } },
-        { $push: { requests: requestDoc } }
+      const foundUsernames = new Set(users.map(u => u.username));
+      invalidUsernames = taggeesUsernames.filter(u => !foundUsernames.has(u));
+
+      if (users.length > 0) {
+        validTaggedUsers = users.map(u => u._id);
+        const requestDoc = { from: user._id, date: new Date(), images: createdIds };
+        await User.updateMany({ _id: { $in: validTaggedUsers } }, { $push: { requests: requestDoc } });
+      }
+    }
+
+    // ---------- Increment ref (uploader + tagged users) ----------
+    const totalRefIncrement = albumIds.length + validTaggedUsers.length;
+    if (totalRefIncrement > 0) {
+      await Image.updateMany(
+        { _id: { $in: createdIds } },
+        { $inc: { "images.ref": totalRefIncrement } }
       );
     }
 
-    return res.json({ created: createdIds.length, imageIds: createdIds });
+    // ---------- Update uploader storage ----------
+    if (bytesAdded > 0) {
+      user.plan.spaceUsed = Number(user.plan?.spaceUsed || 0) + bytesAdded;
+      await user.save();
+    }
+
+    return res.json({
+      created: createdIds.length,
+      imageIds: createdIds,
+      refIncrementedBy: totalRefIncrement,
+      invalidUsernames,
+    });
+
   } catch (err) {
+    console.error("upload-complete error:", err);
+    // ensure uploaded objects are cleaned up
+    if (uploadedKeys.length) await deleteS3Objects(uploadedKeys);
     return e500(res, "server error");
   }
 });

@@ -6,6 +6,7 @@ import User from "../models/userschema.js";
 import { Album } from "../models/albumschema.js";
 import { Image } from "../models/imagesschema.js";
 import { authMiddleware } from "../middlewares/auth.js";
+import { deleteS3Objects } from "../services/s3Delete.js"; // 👈 add this
 
 const router = express.Router();
 
@@ -18,7 +19,9 @@ const isValidId = id =>
   mongoose.Types.ObjectId.isValid(id) &&
   String(new mongoose.Types.ObjectId(id)) === String(id);
 
-// Accept a tag request: attach images to event/date rows in multiple albums and clean up requests
+// ==========================================================
+// ✅ Accept a tag request
+// ==========================================================
 router.post("/requests/accept", authMiddleware, async (req, res) => {
   try {
     const { imageIds = [], event, date, albumIds = [], taggeesUsernames = [], requestIndex } = req.body;
@@ -101,6 +104,7 @@ router.post("/requests/accept", authMiddleware, async (req, res) => {
       await me.save();
     }
 
+    // Send new tag requests if taggeesUsernames given
     if (Array.isArray(taggeesUsernames) && taggeesUsernames.length && imageIds.length) {
       const users = await User.find(
         { username: { $in: taggeesUsernames.map(String) } },
@@ -115,51 +119,139 @@ router.post("/requests/accept", authMiddleware, async (req, res) => {
       await User.updateMany({ _id: { $in: taggeeIds } }, { $push: { requests: requestDoc } });
     }
 
-    // Instead of removing by matching imageIds, remove request by requestIndex if provided
-    if (typeof requestIndex === "number") {
+    // Remove the tag request
+try {
+    const { requestIndex } = req.body;
+    if (typeof requestIndex !== "number" || requestIndex < 0)
+      return e400(res, "requestIndex must be a non-negative number");
+
+    const me = await User.findById(req.user.id, { requests: 1 });
+    if (!me) return e404(res, "user not found");
+    if (!Array.isArray(me.requests) || requestIndex >= me.requests.length)
+      return e404(res, "request index out of range");
+
+    const request = me.requests[requestIndex];
+    if (!request || !Array.isArray(request.images) || request.images.length === 0) {
+      // just remove request if no images
       await User.updateOne(
         { _id: me._id },
         { $unset: { [`requests.${requestIndex}`]: 1 } }
       );
-      await User.updateOne(
-        { _id: me._id },
-        { $pull: { requests: null } }
-      );
+      await User.updateOne({ _id: me._id }, { $pull: { requests: null } });
+      return res.json({ removed: true, index: requestIndex });
     }
 
-    return res.json({ added: totalAdded, imageIds });
-  } catch (err) {
-    return e500(res, "server error");
-  }
-});
+    const imageIds = request.images.map(id => new mongoose.Types.ObjectId(id));
 
-// Reject a request by array index, compacting the requests array
-router.post("/requests/reject", authMiddleware, async (req, res) => {
-  try {
-    const { requestIndex } = req.body;
-    if (typeof requestIndex !== "number" || requestIndex < 0) {
-      return e400(res, "requestIndex must be a non-negative number");
+    // 🧩 Decrease ref by 1 for each rejected image
+    await Image.updateMany({ _id: { $in: imageIds } }, { $inc: { "images.ref": -1 } });
+
+    // 🧩 Find images that now have ref < 0 → delete from S3
+    const lowRefs = await Image.find(
+  { _id: { $in: imageIds }, "images.ref": 0 },
+  { "images.key": 1, "images.thumbnailKey": 1 }
+).lean();
+
+
+    if (lowRefs.length) {
+      const keysToDelete = lowRefs.map(d => d.images.key);
+      const thumbKeysToDelete = lowRefs.map(d => d.images.thumbnailKey).filter(Boolean);
+
+      // Delete both originals and thumbnails
+      await deleteS3Objects([...keysToDelete, ...thumbKeysToDelete]);
+
+      // Remove image docs from DB
+      const idsToRemove = lowRefs.map(d => d._id);
+      await Image.deleteMany({ _id: { $in: idsToRemove } });
     }
 
-    const me = await User.findById(req.user.id, { requests: 1 });
-    if (!me) return e404(res, "user not found");
-
-    if (!Array.isArray(me.requests) || requestIndex >= me.requests.length) {
-      return e404(res, "request index out of range");
-    }
-
+    // 🧹 Remove the request
     await User.updateOne(
       { _id: me._id },
       { $unset: { [`requests.${requestIndex}`]: 1 } }
     );
+    await User.updateOne({ _id: me._id }, { $pull: { requests: null } });
 
-    const upd = await User.updateOne(
-      { _id: me._id },
-      { $pull: { requests: null } }
-    );
-
-    return res.json({ removed: upd.modifiedCount > 0, index: requestIndex });
+    return res.json({
+      removed: true,
+      index: requestIndex,
+      deletedImages: lowRefs.length,
+    });
   } catch (err) {
+    console.error("Reject tag error:", err);
+    return e500(res, "server error");
+  }
+
+    return res.json({ added: totalAdded, imageIds });
+  } catch (err) {
+    console.error("Accept tag error:", err);
+    return e500(res, "server error");
+  }
+});
+
+// ==========================================================
+// 🚫 Reject a tag request (decrease ref + delete if ref < 0)
+// ==========================================================
+router.post("/requests/reject", authMiddleware, async (req, res) => {
+  try {
+    const { requestIndex } = req.body;
+    if (typeof requestIndex !== "number" || requestIndex < 0)
+      return e400(res, "requestIndex must be a non-negative number");
+
+    const me = await User.findById(req.user.id, { requests: 1 });
+    if (!me) return e404(res, "user not found");
+    if (!Array.isArray(me.requests) || requestIndex >= me.requests.length)
+      return e404(res, "request index out of range");
+
+    const request = me.requests[requestIndex];
+    if (!request || !Array.isArray(request.images) || request.images.length === 0) {
+      // just remove request if no images
+      await User.updateOne(
+        { _id: me._id },
+        { $unset: { [`requests.${requestIndex}`]: 1 } }
+      );
+      await User.updateOne({ _id: me._id }, { $pull: { requests: null } });
+      return res.json({ removed: true, index: requestIndex });
+    }
+
+    const imageIds = request.images.map(id => new mongoose.Types.ObjectId(id));
+
+    // 🧩 Decrease ref by 1 for each rejected image
+    await Image.updateMany({ _id: { $in: imageIds } }, { $inc: { "images.ref": -1 } });
+
+    // 🧩 Find images that now have ref < 0 → delete from S3
+    const lowRefs = await Image.find(
+  { _id: { $in: imageIds }, "images.ref": 0 },
+  { "images.key": 1, "images.thumbnailKey": 1 }
+).lean();
+
+
+    if (lowRefs.length) {
+      const keysToDelete = lowRefs.map(d => d.images.key);
+      const thumbKeysToDelete = lowRefs.map(d => d.images.thumbnailKey).filter(Boolean);
+
+      // Delete both originals and thumbnails
+      await deleteS3Objects([...keysToDelete, ...thumbKeysToDelete]);
+
+      // Remove image docs from DB
+      const idsToRemove = lowRefs.map(d => d._id);
+      await Image.deleteMany({ _id: { $in: idsToRemove } });
+    }
+
+    // 🧹 Remove the request
+    await User.updateOne(
+      { _id: me._id },
+      { $unset: { [`requests.${requestIndex}`]: 1 } }
+    );
+    await User.updateOne({ _id: me._id }, { $pull: { requests: null } });
+
+    return res.json({
+      removed: true,
+      index: requestIndex,
+      deletedImages: lowRefs.length,
+    });
+  } catch (err) {
+    console.error("Reject tag error:", err);
     return e500(res, "server error");
   }
 });

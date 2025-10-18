@@ -49,7 +49,17 @@ router.post("/upload-init", authMiddleware, async (req, res, next) => {
       const mime = f?.mime || "application/octet-stream";
       const ext = detectExt(mime);
       const key = mediaKey({ userId: req.user.id, ext, y, m });
-      const thumbnailKey = key
+
+      // Remove the original extension
+      const baseKey = key.replace(/\.[^/.]+$/, "");
+
+      // Define which extensions are videos
+      const videoExts = ["mp4", "mov", "avi", "mkv", "webm"];
+
+      // If it's a video, make thumbnail .jpg; otherwise same as key
+      const thumbnailKey = videoExts.includes(ext.toLowerCase())
+        ? `${baseKey}.jpg`
+        : key;
 
       const fileItem = {
         key,

@@ -41,7 +41,7 @@ router.get("/:albumId/images", authMiddleware, async (req, res) => {
         ev.images.slice(startIdx, endIdx).map(async (img) => ({
           id: img._id,
           key: img.images.key, // original (unexposed) S3 key
-          thumbnailUrl: await getPresignedUrl(img.images.thumbnailKey), // presigned URL for frontend
+          thumbnailUrl: await getPresignedUrl(img.images.thumbnailKey,process.env.THUMB_BUCKET), // presigned URL for frontend
         }))
       );
 

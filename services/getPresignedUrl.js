@@ -12,10 +12,10 @@ const s3 = new S3Client({
   },
 });
 
-export const getPresignedUrl = async (key) => {
+export const getPresignedUrl = async (key,Bucket) => {
   try {
     const command = new GetObjectCommand({
-      Bucket: process.env.S3_BUCKET,
+      Bucket,
       Key: key,
     });
 

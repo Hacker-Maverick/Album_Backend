@@ -35,7 +35,7 @@ router.post("/view",authMiddleware, async (req, res) => {
     const urls = await Promise.all(
       images.map(async (img) => {
         const key = img.images.key;
-        const url = await getPresignedUrl(key);
+        const url = await getPresignedUrl(key,process.env.S3_BUCKET);
         return {
           imageId: img._id,
           viewUrl: url,

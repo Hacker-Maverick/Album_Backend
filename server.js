@@ -23,6 +23,7 @@ import loadImages from "./routes/loadImages.js";
 import download from "./routes/download.js";
 import view from "./routes/view.js";
 import makegroup from "./routes/makegroup.js";
+import albumopts from "./routes/albumoptions.js";
 
 dotenv.config();
 
@@ -88,6 +89,7 @@ app.use("/albums", loadImages);
 app.use(download);
 app.use(view);
 app.use(makegroup);
+app.use(albumopts);
 
 //Server listening
 app.listen(process.env.PORT, () => {

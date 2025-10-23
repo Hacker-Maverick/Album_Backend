@@ -20,7 +20,7 @@ const razorpay = new Razorpay({
 const plans = {
     Basic: { amount: 39900, space: 25 * 1024 * 1024 * 1024, months: 6 },
     Standard: { amount: 79900, space: 100 * 1024 * 1024 * 1024, months: 12 },
-    Premium: { amount: 149900, space: 500 * 1024 * 1024 * 1024, months: 24 },
+    Premium: { amount: 149900, space: 250 * 1024 * 1024 * 1024, months: 24 },
 };
 
 // 1️⃣ Create Order

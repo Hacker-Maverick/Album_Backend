@@ -24,6 +24,12 @@ import download from "./routes/download.js";
 import view from "./routes/view.js";
 import makegroup from "./routes/makegroup.js";
 import albumopts from "./routes/albumoptions.js";
+import thumbnailurl from "./routes/thumbnailurl.js";
+import requestdata from "./routes/requestdata.js";
+import verifyroutes from "./routes/verify.js";
+import changePassword from "./routes/changepassword.js";
+import forgotpassword from "./routes/forgotpassword.js";
+import updateuser from "./routes/UpdateUser.js";
 
 dotenv.config();
 
@@ -90,6 +96,12 @@ app.use(download);
 app.use(view);
 app.use(makegroup);
 app.use(albumopts);
+app.use(thumbnailurl);
+app.use(requestdata);
+app.use(verifyroutes);
+app.use(changePassword);
+app.use("/forgot-password",forgotpassword);
+app.use(updateuser);
 
 //Server listening
 app.listen(process.env.PORT, () => {

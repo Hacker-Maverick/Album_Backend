@@ -29,10 +29,6 @@ router.delete("/account", authMiddleware, async (req, res) => {
       }
     }
 
-    if (!albumIds.length) {
-      console.log("⚠️ No albums found for user, proceeding with account deletion.");
-    }
-
     // 🔁 Step 3: Delete each album using the backend /album/delete route
     for (const albumId of albumIds) {
       try {

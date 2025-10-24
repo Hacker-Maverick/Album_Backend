@@ -2,6 +2,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import User from "../models/userschema.js";
+import { Image } from "../models/imagesschema.js";
 import { authMiddleware } from "../middlewares/auth.js";
 
 const router = express.Router();
@@ -47,6 +48,12 @@ router.post("/share", authMiddleware, async (req, res) => {
     const upd = await User.updateMany(
       { _id: { $in: taggeeIds } },
       { $push: { requests: requestDoc } }
+    );
+
+    // 🔹 Increase image ref count for each tagging action
+    await Image.updateMany(
+      { _id: { $in: imageIds.map(id => new mongoose.Types.ObjectId(id)) } },
+      { $inc: { "images.ref": 1 } }
     );
 
     return res.json({

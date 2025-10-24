@@ -16,15 +16,22 @@ const groupSchema = new mongoose.Schema({
 
 const userSchema = new mongoose.Schema(
   {
-    username: { type: String, required: true , unique: true},
+    username: { type: String, required: true, unique: true },
     email: { type: String, unique: true, sparse: true },
     phone: { type: String, unique: true, sparse: true },
     password: { type: String }, // Only for manual signup
     phoneVerified: { type: Boolean, default: false },
     emailVerified: { type: Boolean, default: false },
-    requests:[{from:{type: mongoose.Schema.Types.ObjectId, ref: "User"}, date: {type: Date, default: Date.now}, images:[{type:mongoose.Schema.Types.ObjectId,ref:"Image"}],_id:false}], // image requests
-    friends:[{ref_id: {type:mongoose.Schema.Types.ObjectId, ref: "User"},username:{type:String},nickname:{type:String}}], // friends list
-
+    requests: [{ from: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, date: { type: Date, default: Date.now }, images: [{ type: mongoose.Schema.Types.ObjectId, ref: "Image" }], _id: false }], // image requests
+    friends: [{ ref_id: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, username: { type: String }, nickname: { type: String } }], // friends list
+    friendRequests: [
+      {
+        from: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        username: { type: String },
+        date: { type: Date, default: Date.now },
+        _id: false,
+      },
+    ],
     // 🔐 This field tells us how the user signed up
     authProvider: {
       type: String,

@@ -31,6 +31,7 @@ import changePassword from "./routes/changepassword.js";
 import forgotpassword from "./routes/forgotpassword.js";
 import updateuser from "./routes/UpdateUser.js";
 import deleteaccount from "./routes/deleteaccount.js";
+import friendroutes from "./routes/friends.js";
 
 dotenv.config();
 
@@ -104,6 +105,7 @@ app.use(changePassword);
 app.use("/forgot-password",forgotpassword);
 app.use(updateuser);
 app.use(deleteaccount);
+app.use("/friends",friendroutes);
 
 //Server listening
 app.listen(process.env.PORT, () => {

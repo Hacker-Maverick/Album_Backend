@@ -17,8 +17,6 @@ export const sendOtpSms = async (phoneNumber, otp) => {
     });
 
     const data = await response.json();
-    console.log(data)
-
     if (data && data.return === true) {
       return { success: true, message: "OTP sent successfully", response: data };
     } else {

@@ -60,12 +60,10 @@ router.put("/album/rename", authMiddleware, async (req, res) => {
    DELETE /album/delete
    - Deletes the album doc and removes it from user's groups
    - You said: Hidden CAN be deleted
-   - This route does NOT delete images; the FE helper will call /delete first
-   Body: { albumId }
 ============================================================ */
 router.delete("/album/delete", authMiddleware, async (req, res) => {
   try {
-    const { albumId } = req.body;
+    const { albumId, deleteMain = false } = req.body;
 
     if (!albumId || !isValidId(albumId))
       return res.status(400).json({ message: "Valid albumId required" });
@@ -74,7 +72,7 @@ router.delete("/album/delete", authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
 
     // 🛑 Prevent deleting main album
-    if (String(user.main_album) === String(albumId))
+    if (String(user.main_album) === String(albumId) && !deleteMain)
       return res.status(403).json({ message: "Main album cannot be deleted" });
 
     const album = await Album.findById(albumId);

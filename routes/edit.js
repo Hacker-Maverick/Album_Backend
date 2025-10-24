@@ -1,4 +1,3 @@
-// src/routes/images-edit.js
 import express from "express";
 import dayjs from "dayjs";
 import mongoose from "mongoose";
@@ -23,7 +22,6 @@ router.post("/edit", authMiddleware, async (req, res) => {
   try {
     const { albumIds = [], imageIds = [], event, date } = req.body;
 
-    // Validate inputs
     if (!Array.isArray(albumIds) || albumIds.length === 0) return e400(res, "albumIds required");
     if (!Array.isArray(imageIds) || imageIds.length === 0) return e400(res, "imageIds required");
     if (!event || !date) return e400(res, "event and date required");
@@ -37,8 +35,6 @@ router.post("/edit", authMiddleware, async (req, res) => {
     const albumObjIds = albumIds.map(id => new mongoose.Types.ObjectId(id));
     const imageObjIds = imageIds.map(id => new mongoose.Types.ObjectId(id));
 
-    // 1) Precompute which target albums already contain each image (presence check)
-    // presentByImage: Map<imgIdStr, Set<albumIdStr>>
     const presentByImage = new Map();
     for (const imgId of imageObjIds) {
       const holders = await Album.find(
@@ -48,33 +44,38 @@ router.post("/edit", authMiddleware, async (req, res) => {
       presentByImage.set(String(imgId), new Set(holders.map(h => String(h._id))));
     }
 
-    // 2) Load all target albums
     const albums = await Album.find({ _id: { $in: albumObjIds } });
     if (!albums.length) return e404(res, "no target albums found");
 
-    // Track which albums we touched for pruning later
     const touchedAlbumIds = new Set();
-    // Track per-image, which albums got newly added: Map<imgIdStr, Set<albumIdStr>>
     const addedByImage = new Map();
     for (const imgId of imageObjIds) addedByImage.set(String(imgId), new Set());
 
-    // 3) For each album: remove image from all rows, then add to event/date row if not already present
     const perAlbumResults = [];
+
     for (const album of albums) {
       touchedAlbumIds.add(String(album._id));
       album.data = Array.isArray(album.data) ? album.data : [];
 
-      // Find/create destination row
+      // ✅ Find/create destination row
       let rowIdx = album.data.findIndex(
         r => r?.event === event && r?.date && sameDay(r.date, normalizedDate)
       );
       if (rowIdx === -1) {
         album.data.push({ event, date: normalizedDate, images: [] });
-        rowIdx = album.data.length - 1;
       }
+
+      // ✅ Sort album.data by date descending (latest first)
+      album.data.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      // ✅ Update rowIdx after sorting
+      rowIdx = album.data.findIndex(r =>
+        r?.event === event && sameDay(r.date, normalizedDate)
+      );
+
       const destRow = album.data[rowIdx];
 
-      // Remove images from all rows in this album
+      // ✅ Remove images from all rows
       let removed = 0;
       for (const row of album.data) {
         const prev = row.images.length;
@@ -84,34 +85,32 @@ router.post("/edit", authMiddleware, async (req, res) => {
         }
       }
 
-      // Add to destination only if not already present before this operation (presence pre-check)
+      // ✅ Add to destination
       let added = 0;
       for (const imgId of imageObjIds) {
         const imgStr = String(imgId);
         const hadSet = presentByImage.get(imgStr) || new Set();
         const alreadyInThisAlbum = hadSet.has(String(album._id));
         if (!alreadyInThisAlbum) {
-          // ensure not already in dest after our removals
           if (!destRow.images.some(x => String(x) === imgStr)) {
             destRow.images.push(imgId);
             added += 1;
             addedByImage.get(imgStr)?.add(String(album._id));
           }
         } else {
-          // This album already had the image; reinsert into the destination row if our removal cleared it
-          // but since it was already present before, we must not count an increment.
           if (!destRow.images.some(x => String(x) === imgStr)) {
             destRow.images.push(imgId);
-            // no increment recorded
           }
         }
       }
+
+      // ✅ Ensure final sort before saving (safety)
+      album.data.sort((a, b) => new Date(b.date) - new Date(a.date));
 
       await album.save();
       perAlbumResults.push({ albumId: String(album._id), removed, added });
     }
 
-    // 4) Apply per-image increments equal to number of new albums added
     const bulkOps = [];
     for (const [imgStr, addedSet] of addedByImage.entries()) {
       const count = addedSet.size;
@@ -128,7 +127,6 @@ router.post("/edit", authMiddleware, async (req, res) => {
       await Image.bulkWrite(bulkOps, { ordered: false });
     }
 
-    // 5) Prune empty rows only for the albums we touched
     if (touchedAlbumIds.size) {
       const prunes = [...touchedAlbumIds].map(id => new mongoose.Types.ObjectId(id));
       await Album.updateMany(
@@ -143,9 +141,13 @@ router.post("/edit", authMiddleware, async (req, res) => {
       albumsProcessed: perAlbumResults.length,
       perAlbum: perAlbumResults,
       images: imageIds,
-      incrementsPerImage: [...addedByImage.entries()].map(([img, set]) => ({ imageId: img, incBy: set.size }))
+      incrementsPerImage: [...addedByImage.entries()].map(([img, set]) => ({
+        imageId: img,
+        incBy: set.size
+      }))
     });
   } catch (err) {
+    console.error("Edit images error:", err);
     return e500(res, "server error");
   }
 });

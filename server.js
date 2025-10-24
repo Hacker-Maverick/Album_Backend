@@ -30,6 +30,7 @@ import verifyroutes from "./routes/verify.js";
 import changePassword from "./routes/changepassword.js";
 import forgotpassword from "./routes/forgotpassword.js";
 import updateuser from "./routes/UpdateUser.js";
+import deleteaccount from "./routes/deleteaccount.js";
 
 dotenv.config();
 
@@ -102,6 +103,7 @@ app.use(verifyroutes);
 app.use(changePassword);
 app.use("/forgot-password",forgotpassword);
 app.use(updateuser);
+app.use(deleteaccount);
 
 //Server listening
 app.listen(process.env.PORT, () => {

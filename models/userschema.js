@@ -32,6 +32,8 @@ const userSchema = new mongoose.Schema(
         _id: false,
       },
     ],
+    credits: { type: Number, default: 0 },
+    referalCode: { type: String, unique: true },
     // 🔐 This field tells us how the user signed up
     authProvider: {
       type: String,

@@ -11,7 +11,7 @@ router.get("/me", authMiddleware, async (req, res) => {
     // req.user is set by authMiddleware
     const user = await User.findOne({ _id: req.user.id }).select("-password -requests"); // exclude password
     if (!user) return res.status(404).json({ message: "User not found" });
-
+    if (!user.emailVerified) return res.status(403).json({ message: "Email not verified" });
     res.json(user);
   } catch (err) {
     console.error(err);

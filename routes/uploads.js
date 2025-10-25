@@ -10,6 +10,8 @@ import { presignPutUrl } from "../services/s3Presign.js";
 import { deleteS3Objects } from "../services/s3Delete.js";
 import { mediaKey, detectExt } from "../utils/keys.js";
 import { authMiddleware } from "../middlewares/auth.js";
+import { updateServerLogs } from "../utils/serverLogs.js";
+
 
 const router = express.Router();
 const s3 = new S3Client({ region: process.env.AWS_REGION });
@@ -131,40 +133,40 @@ router.post("/upload-complete", authMiddleware, async (req, res) => {
     const normalizedDate = new Date(date);
     const sameDay = (d1, d2) => dayjs(d1).startOf("day").isSame(dayjs(d2).startOf("day"));
 
-for (const albumId of albumIds) {
-  const album = await Album.findById(albumId);
-  if (!album) continue;
+    for (const albumId of albumIds) {
+      const album = await Album.findById(albumId);
+      if (!album) continue;
 
-  album.data = Array.isArray(album.data) ? album.data : [];
-  let rowIdx = album.data.findIndex(r => r?.event === event && r?.date && sameDay(r.date, normalizedDate));
+      album.data = Array.isArray(album.data) ? album.data : [];
+      let rowIdx = album.data.findIndex(r => r?.event === event && r?.date && sameDay(r.date, normalizedDate));
 
-  if (rowIdx === -1) {
-    album.data.push({ event, date: normalizedDate, images: [] });
-  }
+      if (rowIdx === -1) {
+        album.data.push({ event, date: normalizedDate, images: [] });
+      }
 
-  // ✅ Sort by date descending (latest first)
-  album.data.sort((a, b) => new Date(b.date) - new Date(a.date));
+      // ✅ Sort by date descending (latest first)
+      album.data.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  // 🔍 Update index after sorting
-  rowIdx = album.data.findIndex(r =>
-    r.event === event && sameDay(r.date, normalizedDate)
-  );
+      // 🔍 Update index after sorting
+      rowIdx = album.data.findIndex(r =>
+        r.event === event && sameDay(r.date, normalizedDate)
+      );
 
-  const addIds = createdIds.map(id => new mongoose.Types.ObjectId(id));
-  const upd = await Album.updateOne(
-    { _id: album._id, [`data.${rowIdx}.event`]: event, [`data.${rowIdx}.date`]: album.data[rowIdx].date },
-    { $addToSet: { [`data.${rowIdx}.images`]: { $each: addIds } } }
-  );
+      const addIds = createdIds.map(id => new mongoose.Types.ObjectId(id));
+      const upd = await Album.updateOne(
+        { _id: album._id, [`data.${rowIdx}.event`]: event, [`data.${rowIdx}.date`]: album.data[rowIdx].date },
+        { $addToSet: { [`data.${rowIdx}.images`]: { $each: addIds } } }
+      );
 
-  if (!upd.matchedCount) {
-    const has = new Set(album.data[rowIdx].images.map(x => String(x)));
-    for (const oid of addIds) if (!has.has(String(oid))) album.data[rowIdx].images.push(oid);
-  }
+      if (!upd.matchedCount) {
+        const has = new Set(album.data[rowIdx].images.map(x => String(x)));
+        for (const oid of addIds) if (!has.has(String(oid))) album.data[rowIdx].images.push(oid);
+      }
 
-  // ✅ Ensure sorted again before saving (in case new date was inserted)
-  album.data.sort((a, b) => new Date(b.date) - new Date(a.date));
-  await album.save();
-}
+      // ✅ Ensure sorted again before saving (in case new date was inserted)
+      album.data.sort((a, b) => new Date(b.date) - new Date(a.date));
+      await album.save();
+    }
 
 
     // ---------- Tag users ----------
@@ -201,6 +203,10 @@ for (const albumId of albumIds) {
       user.plan.spaceUsed = Number(user.plan?.spaceUsed || 0) + bytesAdded;
       await user.save();
     }
+
+    // ---------- Update ServerLogs ----------
+    let count = createdIds.length;
+    await updateServerLogs("imageUploaded", { count });
 
     return res.json({
       created: createdIds.length,

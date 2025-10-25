@@ -5,6 +5,8 @@ import { Payment } from "../models/paymentschema.js";
 import User from "../models/userschema.js";
 import { authMiddleware } from "../middlewares/auth.js";
 import dotenv from "dotenv";
+import { updateServerLogs } from "../utils/serverLogs.js";
+
 
 const router = express.Router();
 
@@ -78,12 +80,16 @@ router.post("/verify", authMiddleware, async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid signature" });
         }
 
-        // Update payment
-        const payment = await Payment.findOneAndUpdate(
-            { orderId },
-            { paymentId, signature, status: "captured" },
-            { new: true }
-        );
+        // 🔍 Find payment record by orderId (since we saved it earlier)
+        const payment = await Payment.findOne({ orderId });
+        if (!payment)
+            return res.status(404).json({ success: false, message: "Payment record not found" });
+
+        // ✅ Update DB with final details
+        payment.paymentId = paymentId;
+        payment.signature = signature;
+        payment.status = "captured";
+        await payment.save();
 
         // Update user plan
         const planInfo = plans[payment.plan];
@@ -103,6 +109,11 @@ router.post("/verify", authMiddleware, async (req, res) => {
             },
             { new: true }
         );
+
+        // 🆕 Update server logs for payment made
+        // 💾 Fetch amount from DB and store in ServerLogs
+        const amountPaid = payment.amount / 100; // convert from paise → rupees
+        await updateServerLogs("paymentMade", { amount: amountPaid });
 
 
         res.json({

@@ -1,5 +1,6 @@
 // src/utils/createAlbum.js
 import { Album } from "../models/albumschema.js";
+import { updateServerLogs } from "./serverLogs.js";
 
 /**
  * Create a new empty album
@@ -17,6 +18,9 @@ export async function createEmptyAlbum(type) {
   });
 
   await album.save();
+
+      // 🆕 Update server logs for album creation
+    await updateServerLogs("albumCreated", { count: 1 });
 
   return album._id;
 }

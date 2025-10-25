@@ -5,6 +5,7 @@ import ServerLogs from "../models/serverlogschema.js";
 import { generateToken } from "../utils/jwt.js";
 import { createEmptyAlbum } from "../utils/createAlbum.js";
 import { checkEmailInServerLogs } from "../utils/checkRegMail.js";
+import { updateServerLogs } from "../utils/serverLogs.js";
 
 const router = express.Router();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -79,14 +80,7 @@ router.post("/auth/google", async (req, res) => {
       });
 
       // 🟢 Step 4: Update ServerLogs
-      await ServerLogs.updateOne(
-        {},
-        {
-          $push: { "lifetime.allUserEmails": email },
-          $inc: { "lifetime.totalUsers": 1 },
-        },
-        { upsert: true }
-      );
+      await updateServerLogs("userSignedUp", { email: email });
 
       statuscode = 201;
     }

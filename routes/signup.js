@@ -5,6 +5,8 @@ import { hashPassword } from "../utils/bcrypt.js";
 import { generateToken } from "../utils/jwt.js";
 import { createEmptyAlbum } from "../utils/createAlbum.js";
 import { checkEmailInServerLogs } from "../utils/checkRegMail.js";
+import { updateServerLogs } from "../utils/serverLogs.js";
+
 
 const router = express.Router();
 
@@ -80,14 +82,7 @@ router.post("/signup", async (req, res) => {
     await user.save();
 
     // ✅ Step 7: Update ServerLogs
-    await ServerLogs.updateOne(
-      {},
-      {
-        $push: { "lifetime.allUserEmails": email },
-        $inc: { "lifetime.totalUsers": 1 },
-      },
-      { upsert: true }
-    );
+    await updateServerLogs("userSignedUp", { email: email });
 
     // ✅ Step 8: Generate JWT
     const token = generateToken({ id: user._id });

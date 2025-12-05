@@ -7,7 +7,7 @@ import { validateLogin } from "../middlewares/validations.js";
 const router = Router();
 
 // Manual Login
-router.post("/", validateLogin, async (req, res) => {
+router.post("/login", validateLogin, async (req, res) => {
   try {
     const { email, password } = req.body;
 

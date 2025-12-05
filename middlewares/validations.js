@@ -3,14 +3,23 @@ import { body, param, query, validationResult } from "express-validator";
 // Middleware to handle validation errors
 export const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
+
   if (!errors.isEmpty()) {
-    return res.status(400).json({ 
+    // Combine all validation messages into a single readable string
+    const message = errors
+      .array()
+      .map(err => err.msg)
+      .join(", ");
+
+    return res.status(400).json({
       success: false,
-      errors: errors.array().map(err => ({ field: err.param, message: err.msg }))
+      message // this is what your frontend will display as data.message
     });
   }
+
   next();
 };
+
 
 // Auth Validators
 export const validateSignup = [
@@ -62,6 +71,25 @@ export const validateForgotPassword = [
       }
       return true;
     }),
+  body("otp")
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage("OTP is required")
+    .isLength({ min: 6, max: 6 })
+    .withMessage("OTP must be 6 digits"),
+  body("newPassword")
+    .optional()
+    .isLength({ min: 8 })
+    .withMessage("New password must be at least 8 characters")
+    .matches(/[A-Z]/)
+    .withMessage("Password must contain uppercase letter")
+    .matches(/[a-z]/)
+    .withMessage("Password must contain lowercase letter")
+    .matches(/[0-9]/)
+    .withMessage("Password must contain number")
+    .matches(/[!@#$%^&*]/)
+    .withMessage("Password must contain special character (!@#$%^&*)"),
   handleValidationErrors
 ];
 
@@ -121,7 +149,7 @@ export const validateUpdateUser = [
 
 // Friends Validators
 export const validateFriendRequest = [
-  body("toId")
+  param("toId")
     .notEmpty()
     .withMessage("Recipient ID is required")
     .isMongoId()
@@ -130,7 +158,7 @@ export const validateFriendRequest = [
 ];
 
 export const validateFriendAction = [
-  param("id")
+  param("fromId")
     .isMongoId()
     .withMessage("Invalid friend ID"),
   handleValidationErrors
@@ -184,7 +212,7 @@ export const validateRedeem = [
   body("plan")
     .notEmpty()
     .withMessage("Plan is required")
-    .isIn(["free", "basic", "premium"])
+    .isIn(["Free", "Basic", "Standard", "Premium"])
     .withMessage("Invalid plan type"),
   handleValidationErrors
 ];

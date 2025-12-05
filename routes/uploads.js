@@ -11,7 +11,6 @@ import { deleteS3Objects } from "../services/s3Delete.js";
 import { mediaKey, detectExt } from "../utils/keys.js";
 import { authMiddleware } from "../middlewares/auth.js";
 import { updateServerLogs } from "../utils/serverLogs.js";
-import { validateFileUpload } from "../middlewares/validations.js";
 
 
 const router = express.Router();
@@ -34,7 +33,7 @@ const e500 = (res, m) => res.status(500).json({ code: "SERVER_ERROR", message: m
 // ===========================================================
 // 1) INIT: return presigned PUT URLs
 // ===========================================================
-router.post("/upload-init", authMiddleware,validateFileUpload, async (req, res, next) => {
+router.post("/upload-init", authMiddleware, async (req, res, next) => {
   try {
     const { files } = req.body;
     if (!Array.isArray(files) || files.length === 0) return e400(res, "files required");

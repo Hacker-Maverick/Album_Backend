@@ -32,8 +32,8 @@ router.post("/makegroup", authMiddleware, async (req, res) => {
       return e400(res, "albumName cannot be 'Main' or 'Main Album'");
     }
 
-    if (lowerName == "hidden" || lowerName == "hidden album" || lowerName == "hidden_album") {
-      return e400(res, "albumName cannot be 'Main' or 'Main Album'");
+    if (albumType!="Hidden" && (lowerName == "hidden" || lowerName == "hidden album" || lowerName == "hidden_album")) {
+      return e400(res, "albumName cannot be 'Hidden' or 'Hidden Album'");
     }
 
     // 1️⃣ Create a new empty album

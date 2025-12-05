@@ -2,9 +2,10 @@ import { Router } from "express";
 import { validateForgotPassword } from "../middlewares/validations.js";
 import User from "../models/userschema.js";
 import { hashPassword } from "../utils/bcrypt.js";
-import { sendMail } from "../utils/nodemailer.js";
+import { sendMail } from "../utils/mailtransporter.js";
 import { sendOtpSms } from "../utils/messager.js";
 import { generateOtp } from "../utils/otp.js";
+import { mailTemplate as htmlTemplate } from "../utils/mailtemp.js";
 
 const router = Router();
 
@@ -36,7 +37,7 @@ function verifyOtp(identifier, inputOtp) {
 /* ============================================
    🔹 ROUTE 1 — SEND OTP
    ============================================ */
-router.post("/send", async (req, res) => {
+router.post("/send",validateForgotPassword, async (req, res) => {
   try {
     const { identifier } = req.body;
     if (!identifier)
@@ -58,9 +59,9 @@ router.post("/send", async (req, res) => {
       if (!result?.success) return res.status(500).json({ error: "Failed to send SMS" });
     } else {
       const subject = "Password Reset OTP";
-      const html = `<p>Your OTP for password reset is <strong>${otp}</strong>. It is valid for 5 minutes.</p>`;
+      const html = htmlTemplate.replace("123456", otp);
       const result = await sendMail(identifier, subject, null, html);
-      if (!result?.success) return res.status(500).json({ error: "Failed to send OTP" });
+      if (!result?.accepted.length) return res.status(500).json({ error: "Failed to send OTP" });
     }
 
     res.status(200).json({ message: "OTP sent successfully (valid for 5 minutes)" });
@@ -73,7 +74,7 @@ router.post("/send", async (req, res) => {
 /* ============================================
    🔹 ROUTE 2 — VERIFY OTP
    ============================================ */
-router.post("/verify", async (req, res) => {
+router.post("/verify",validateForgotPassword, async (req, res) => {
   try {
     const { identifier, otp } = req.body;
     if (!identifier || !otp)
@@ -92,7 +93,7 @@ router.post("/verify", async (req, res) => {
 /* ============================================
    🔹 ROUTE 3 — RESET PASSWORD
    ============================================ */
-router.post("/reset", async (req, res) => {
+router.post("/reset",validateForgotPassword, async (req, res) => {
   try {
     const { identifier, newPassword } = req.body;
     if (!identifier || !newPassword)

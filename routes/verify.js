@@ -1,9 +1,10 @@
 import express from "express";
 import User from "../models/userschema.js";
 import { sendOtpSms } from "../utils/messager.js";
-import { sendMail } from "../utils/nodemailer.js";
+import { sendMail } from "../utils/mailtransporter.js";
 import { generateOtp } from "../utils/otp.js";
 import { authMiddleware } from "../middlewares/auth.js";
+import { mailTemplate as htmlTemplate } from "../utils/mailtemp.js";
 
 const router = express.Router();
 
@@ -107,11 +108,11 @@ router.get("/email/send", authMiddleware, async (req, res) => {
     const otp = generateOtp();
     setOtp(`email-${email.toLowerCase()}`, otp, 5);
 
-    const subject = "Your OTP for Email Verification";
-    const html = `<p>Your OTP is <strong>${otp}</strong>. It is valid for 5 minutes.</p>`;
+    const subject = "OTP for Email Verification";
+    const html = htmlTemplate.replace("123456", otp);
 
     const result = await sendMail(email, subject, null, html);
-    if (!result?.success)
+    if (!result?.accepted.length)
       return res.status(500).json({ success: false, error: "Failed to send email" });
 
     res.json({

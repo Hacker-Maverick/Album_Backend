@@ -27,6 +27,11 @@ router.post("/signup", validateSignup, async (req, res) => {
       return res.status(400).json({ message: "User already exists" });
     }
 
+    const existingUsername = await User.findOne({ username });
+    if (existingUsername) {
+      return res.status(400).json({ message: "Username already exists, try taking another username" });
+    }
+
     // ✅ Step 2: Check if this email ever existed in ServerLogs
     const emailExistsInServerLog = await checkEmailInServerLogs(email);
 

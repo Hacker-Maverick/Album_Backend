@@ -21,6 +21,7 @@ const sameDay = (d1, d2) => dayjs(d1).startOf("day").isSame(dayjs(d2).startOf("d
 router.post("/edit", authMiddleware, async (req, res) => {
   try {
     const { albumIds = [], imageIds = [], event, date } = req.body;
+    console.log("Edit request:", { albumIds, imageIds, event, date });
 
     if (!Array.isArray(albumIds) || albumIds.length === 0) return e400(res, "albumIds required");
     if (!Array.isArray(imageIds) || imageIds.length === 0) return e400(res, "imageIds required");

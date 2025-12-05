@@ -6,6 +6,7 @@ import { Album } from "../models/albumschema.js";
 import { Image } from "../models/imagesschema.js";
 import User from "../models/userschema.js";
 import { deleteS3Objects } from "../services/s3Delete.js";
+import { validateDelete } from "../middlewares/validations.js";
 
 const router = express.Router();
 
@@ -17,7 +18,7 @@ const isValidId = id =>
   mongoose.Types.ObjectId.isValid(id) &&
   String(new mongoose.Types.ObjectId(id)) === String(id);
 
-router.post("/delete", authMiddleware, async (req, res) => {
+router.post("/delete", authMiddleware, validateDelete, async (req, res) => {
   try {
     const { albumId, albumIds = [], imageIds = [], permanently = false } = req.body;
 

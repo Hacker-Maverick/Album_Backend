@@ -1,9 +1,10 @@
-import express from "express";
+import { Router } from "express";
 import { authMiddleware } from "../middlewares/auth.js";
+import { validateRedeem } from "../middlewares/validations.js";
 import User from "../models/userschema.js";
 import { Payment } from "../models/paymentschema.js";
 
-const router = express.Router();
+const router = Router();
 
 // 🧩 Plan details (price in ₹, space in GB, duration in months)
 const PLAN_DETAILS = {
@@ -14,7 +15,7 @@ const PLAN_DETAILS = {
 };
 
 // 🪙 Redeem credits for plan
-router.post("/redeem-credits", authMiddleware, async (req, res) => {
+router.post("/redeem-credits", authMiddleware,validateRedeem, async (req, res) => {
   try {
     const { plan } = req.body;
     const userId = req.user.id;

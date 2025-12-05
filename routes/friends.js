@@ -1,11 +1,16 @@
-import express from "express";
+import { Router } from "express";
 import User from "../models/userschema.js";
 import { authMiddleware } from "../middlewares/auth.js";
+import { 
+  validateFriendRequest, 
+  validateFriendAction, 
+  validateFriendSearch 
+} from "../middlewares/validations.js";
 
-const router = express.Router();
+const router = Router();
 
 // 🔍 Search users by username
-router.get("/search", authMiddleware, async (req, res) => {
+router.get("/search", authMiddleware, validateFriendSearch, async (req, res) => {
   const { query } = req.query;
   if (!query) return res.status(400).json({ message: "Query required" });
 
@@ -17,7 +22,7 @@ router.get("/search", authMiddleware, async (req, res) => {
 });
 
 // 🤝 Send friend request
-router.post("/send/:toId", authMiddleware, async (req, res) => {
+router.post("/send/:toId", authMiddleware, validateFriendRequest, async (req, res) => {
   try {
     const fromId = req.user.id;
     const toId = req.params.toId;
@@ -51,7 +56,7 @@ router.post("/send/:toId", authMiddleware, async (req, res) => {
 });
 
 // ✅ Accept friend request
-router.post("/accept/:fromId", authMiddleware, async (req, res) => {
+router.post("/accept/:fromId", authMiddleware, validateFriendAction, async (req, res) => {
   try {
     const userId = req.user.id;
     const fromId = req.params.fromId;
@@ -79,7 +84,7 @@ router.post("/accept/:fromId", authMiddleware, async (req, res) => {
 });
 
 // ❌ Reject friend request
-router.post("/reject/:fromId", authMiddleware, async (req, res) => {
+router.post("/reject/:fromId", authMiddleware, validateFriendAction, async (req, res) => {
   try {
     const userId = req.user.id;
     const fromId = req.params.fromId;

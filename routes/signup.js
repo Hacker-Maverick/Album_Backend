@@ -6,7 +6,7 @@ import { generateToken } from "../utils/jwt.js";
 import { createEmptyAlbum } from "../utils/createAlbum.js";
 import { checkEmailInServerLogs } from "../utils/checkRegMail.js";
 import { updateServerLogs } from "../utils/serverLogs.js";
-
+import { validateSignup } from "../middlewares/validations.js";
 
 const router = express.Router();
 
@@ -17,7 +17,7 @@ const generateReferralCode = () => {
 };
 
 // 🟢 Manual Signup with Referral
-router.post("/signup", async (req, res) => {
+router.post("/signup", validateSignup, async (req, res) => {
   try {
     const { username, email, password, phone, referalCode } = req.body;
 

@@ -1,12 +1,13 @@
-import express from "express";
+import { Router } from "express";
 import User from "../models/userschema.js";
 import { comparePassword } from "../utils/bcrypt.js";
 import { generateToken } from "../utils/jwt.js";
+import { validateLogin } from "../middlewares/validations.js";
 
-const router = express.Router();
+const router = Router();
 
 // Manual Login
-router.post("/login", async (req, res) => {
+router.post("/", validateLogin, async (req, res) => {
   try {
     const { email, password } = req.body;
 

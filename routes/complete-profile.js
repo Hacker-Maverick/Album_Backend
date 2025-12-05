@@ -1,12 +1,13 @@
-import express from "express";
+import { Router } from "express";
 import User from "../models/userschema.js";
 import { authMiddleware } from "../middlewares/auth.js";
 import { hashPassword } from "../utils/bcrypt.js";
+import { validateCompleteProfile } from "../middlewares/validations.js";
 
-const router = express.Router();
+const router = Router();
 
 // ✅ Route: Update remaining details for logged-in user
-router.post("/complete-profile", authMiddleware, async (req, res) => {
+router.post("/complete-profile", authMiddleware, validateCompleteProfile, async (req, res) => {
     try {
         const { username, password } = req.body;
 

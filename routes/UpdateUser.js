@@ -1,13 +1,14 @@
 import express from "express";
 import  User  from "../models/userschema.js";
 import { authMiddleware } from "../middlewares/auth.js";
+import { validateUpdateUser } from "../middlewares/validations.js";
 
 const router = express.Router();
 
 /* =====================================
    🔹 Route 1 — Change Email
    ===================================== */
-router.patch("/email/change", authMiddleware, async (req, res) => {
+router.patch("/email/change", authMiddleware,validateUpdateUser, async (req, res) => {
   try {
     const userId = req.user.id;
     const { email } = req.body;
@@ -39,7 +40,7 @@ router.patch("/email/change", authMiddleware, async (req, res) => {
 /* =====================================
    🔹 Route 2 — Change Phone
    ===================================== */
-router.patch("/phone/change", authMiddleware, async (req, res) => {
+router.patch("/phone/change", authMiddleware,validateUpdateUser, async (req, res) => {
   try {
     const userId = req.user.id;
     const { phone } = req.body;

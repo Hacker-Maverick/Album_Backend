@@ -1,4 +1,4 @@
-import express from "express";
+import { Router } from "express";
 import { OAuth2Client } from "google-auth-library";
 import User from "../models/userschema.js";
 import ServerLogs from "../models/serverlogschema.js";
@@ -6,8 +6,9 @@ import { generateToken } from "../utils/jwt.js";
 import { createEmptyAlbum } from "../utils/createAlbum.js";
 import { checkEmailInServerLogs } from "../utils/checkRegMail.js";
 import { updateServerLogs } from "../utils/serverLogs.js";
+import { validateGoogleAuth } from "../middlewares/validations.js";
 
-const router = express.Router();
+const router = Router();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Helper: Generate random 8-character referral code
@@ -16,7 +17,7 @@ const generateReferralCode = () => {
   return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 };
 
-router.post("/auth/google", async (req, res) => {
+router.post("/auth/google", validateGoogleAuth, async (req, res) => {
   try {
     const { idToken, referalCode } = req.body;
 

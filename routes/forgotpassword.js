@@ -1,11 +1,12 @@
-import express from "express";
-import  User  from "../models/userschema.js";
+import { Router } from "express";
+import { validateForgotPassword } from "../middlewares/validations.js";
+import User from "../models/userschema.js";
 import { hashPassword } from "../utils/bcrypt.js";
 import { sendMail } from "../utils/nodemailer.js";
 import { sendOtpSms } from "../utils/messager.js";
 import { generateOtp } from "../utils/otp.js";
 
-const router = express.Router();
+const router = Router();
 
 // ===================================
 // 🕒 TEMP IN-MEMORY STORE
@@ -59,7 +60,7 @@ router.post("/send", async (req, res) => {
       const subject = "Password Reset OTP";
       const html = `<p>Your OTP for password reset is <strong>${otp}</strong>. It is valid for 5 minutes.</p>`;
       const result = await sendMail(identifier, subject, null, html);
-      if (!result?.success) return res.status(500).json({ error: "Failed to send email" });
+      if (!result?.success) return res.status(500).json({ error: "Failed to send OTP" });
     }
 
     res.status(200).json({ message: "OTP sent successfully (valid for 5 minutes)" });

@@ -3,12 +3,13 @@ import mongoose from "mongoose";
 import { Image } from "../models/imagesschema.js";
 import { getPresignedUrl } from "../services/getPresignedUrl.js";
 import { authMiddleware } from "../middlewares/auth.js";
+import { validateView } from "../middlewares/validations.js";
 
 const router = express.Router();
 
 // POST /api/images/view-urls
 // Body: { imageIds: [array of image ObjectIds as strings] }
-router.post("/view",authMiddleware, async (req, res) => {
+router.post("/view", authMiddleware, validateView, async (req, res) => {
   try {
     const userId = req.user.id; // assumed set by auth middleware
     const { imageIds } = req.body;
@@ -35,7 +36,7 @@ router.post("/view",authMiddleware, async (req, res) => {
     const urls = await Promise.all(
       images.map(async (img) => {
         const key = img.images.key;
-        const url = await getPresignedUrl(key,process.env.S3_BUCKET);
+        const url = await getPresignedUrl(key, process.env.S3_BUCKET);
         return {
           imageId: img._id,
           viewUrl: url,

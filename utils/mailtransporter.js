@@ -4,7 +4,6 @@ dotenv.config();
 
 export async function sendMail(to, subject, text, html="") {
 
-    console.log("Preparing to send email to:", to);
   // create transporter using SMTP
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,

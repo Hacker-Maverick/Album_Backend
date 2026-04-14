@@ -61,7 +61,7 @@ router.post("/send",validateForgotPassword, async (req, res) => {
       const subject = "Password Reset OTP";
       const html = htmlTemplate.replace("123456", otp);
       const result = await sendMail(identifier, subject, null, html);
-      if (!result?.accepted.length) return res.status(500).json({ error: "Failed to send OTP" });
+      if (!result?.messageId) return res.status(500).json({ error: "Failed to send OTP" });
     }
 
     res.status(200).json({ message: "OTP sent successfully (valid for 5 minutes)" });

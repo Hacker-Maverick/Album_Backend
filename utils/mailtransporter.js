@@ -1,32 +1,27 @@
-import nodemailer from "nodemailer";
+import * as SibApiV3Sdk from "@getbrevo/brevo";
 import dotenv from "dotenv";
 dotenv.config();
 
-export async function sendMail(to, subject, text, html="") {
+const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+apiInstance.setApiKey(SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
 
-  // create transporter using SMTP
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 465,
-    secure: true, // true for 465, false for 587
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    },
-    // optional: increase timeout for slow networks
-    // connectionTimeout: 50000,
-  });
+export async function sendMail(to, subject, text, html = "") {
+  try {
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
 
-  // Verify config (optional, helpful for debugging)
-  await transporter.verify();
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = html;
+    sendSmtpEmail.textContent = text || undefined;
+    sendSmtpEmail.sender = {
+      name: process.env.FROM_NAME || "Albumify",
+      email: process.env.FROM_EMAIL || "pkumar199199@gmail.com",
+    };
+    sendSmtpEmail.to = [{ email: to }];
 
-  const info = await transporter.sendMail({
-    from: `"${process.env.FROM_NAME}" <${process.env.FROM_EMAIL}>`,
-    to,
-    subject,
-    text,
-    html
-  });
-
-  return info;
+    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    return result;
+  } catch (error) {
+    console.error("Brevo Email Error:", error);
+    return { error };
+  }
 }

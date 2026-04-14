@@ -112,7 +112,7 @@ router.get("/email/send", authMiddleware, async (req, res) => {
     const html = htmlTemplate.replace("123456", otp);
 
     const result = await sendMail(email, subject, null, html);
-    if (!result?.accepted.length)
+    if (!result?.messageId)
       return res.status(500).json({ success: false, error: "Failed to send email" });
 
     res.json({
